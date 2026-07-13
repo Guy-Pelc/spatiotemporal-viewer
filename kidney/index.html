@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kidney Injury/Repair — Spatial Viewer</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2230; --border:#2b3444;
+    --text:#e6edf3; --muted:#8b98a9; --accent:#4c9aff;
+    --shadow:0 6px 24px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg); color:var(--text);
+    font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    display:flex; height:100vh; overflow:hidden;
+  }
+  /* sidebar */
+  #side{
+    width:290px; flex:0 0 290px; background:var(--panel); border-right:1px solid var(--border);
+    display:flex; flex-direction:column; overflow-y:auto;
+  }
+  #side h1{font-size:14px; margin:0; padding:16px 16px 4px; letter-spacing:.2px}
+  #side .sub{color:var(--muted); font-size:11px; padding:0 16px 14px}
+  .group{padding:12px 16px; border-top:1px solid var(--border)}
+  .group label.h{display:block; font-size:11px; text-transform:uppercase; letter-spacing:.6px;
+    color:var(--muted); margin-bottom:7px}
+  select,input[type=text]{
+    width:100%; background:var(--panel2); color:var(--text); border:1px solid var(--border);
+    border-radius:7px; padding:7px 9px; font-size:13px; outline:none;
+  }
+  select:focus,input:focus{border-color:var(--accent)}
+  .seg{display:flex; gap:6px}
+  .seg button{
+    flex:1; background:var(--panel2); color:var(--muted); border:1px solid var(--border);
+    border-radius:7px; padding:7px 0; cursor:pointer; font-size:12px; transition:.12s;
+  }
+  .seg button.on{background:var(--accent); color:#fff; border-color:var(--accent)}
+  .row{display:flex; align-items:center; gap:8px; margin-top:9px}
+  .row span{color:var(--muted); font-size:11px; width:52px}
+  input[type=range]{flex:1; accent-color:var(--accent)}
+  /* legend */
+  #legend{padding:6px 16px 16px}
+  .lg{display:flex; align-items:center; gap:8px; padding:3px 4px; border-radius:6px; cursor:pointer;
+    font-size:12px; user-select:none}
+  .lg:hover{background:var(--panel2)}
+  .lg.off{opacity:.35}
+  .sw{width:11px; height:11px; border-radius:3px; flex:0 0 11px}
+  .lg .ct{margin-left:auto; color:var(--muted); font-variant-numeric:tabular-nums}
+  #cbar{height:12px; border-radius:4px; margin:4px 0}
+  #cbar-labels{display:flex; justify-content:space-between; color:var(--muted); font-size:11px}
+  /* main */
+  #main{flex:1; position:relative; min-width:0}
+  #cv{display:block; width:100%; height:100%; cursor:crosshair}
+  #tip{
+    position:absolute; pointer-events:none; background:rgba(20,25,34,.96); border:1px solid var(--border);
+    border-radius:8px; padding:8px 10px; font-size:12px; box-shadow:var(--shadow); display:none;
+    max-width:230px; z-index:5;
+  }
+  #tip b{color:var(--accent)}
+  #tip .k{color:var(--muted)}
+  #hud{
+    position:absolute; left:14px; bottom:12px; color:var(--muted); font-size:11px;
+    background:rgba(20,25,34,.7); padding:4px 9px; border-radius:6px; backdrop-filter:blur(4px);
+  }
+  #loading{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    flex-direction:column; gap:12px; color:var(--muted); background:var(--bg); z-index:10}
+  .spin{width:34px;height:34px;border:3px solid var(--border);border-top-color:var(--accent);
+    border-radius:50%; animation:sp 1s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .hint{color:var(--muted); font-size:11px; padding:2px 16px 14px}
+  a.reset{color:var(--accent); cursor:pointer; font-size:11px}
+</style>
+</head>
+<body>
+  <div id="side">
+    <h1>Kidney Injury/Repair Atlas</h1>
+    <div class="sub" id="subhead">loading…</div>
+
+    <div class="group">
+      <label class="h">Dataset</label>
+      <select id="datasetPicker">
+        <option value="/index.html">Mouse-brain aging</option>
+        <option value="/kidney/index.html">Kidney injury/repair</option>
+      </select>
+    </div>
+
+    <div class="group">
+      <label class="h">View</label>
+      <div class="seg" id="viewSeg">
+        <button data-v="spatial" class="on">Spatial</button>
+        <button data-v="umap">UMAP</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <label class="h">Color by</label>
+      <select id="colorBy"></select>
+      <div id="geneWrap" style="display:none; margin-top:9px">
+        <input type="text" id="geneSearch" placeholder="Search genes… e.g. Havcr1">
+        <select id="geneList" size="6" style="margin-top:6px"></select>
+      </div>
+    </div>
+
+    <div class="group">
+      <label class="h">Filter</label>
+      <select id="filterField"></select>
+      <select id="filterVal" style="margin-top:6px"></select>
+    </div>
+
+    <div class="group">
+      <label class="h">Display</label>
+      <div class="row"><span>Point</span><input type="range" id="ptSize" min="1" max="8" step="0.5" value="2.5"></div>
+      <div class="row"><span>Opacity</span><input type="range" id="ptAlpha" min="0.1" max="1" step="0.05" value="0.85"></div>
+    </div>
+
+    <div class="group" style="flex:1">
+      <label class="h" id="legTitle">Legend <a class="reset" id="legReset" style="float:right">reset</a></label>
+      <div id="legend"></div>
+    </div>
+    <div class="hint">Scroll to zoom · drag to pan · double-click to reset view</div>
+  </div>
+
+  <div id="main">
+    <canvas id="cv"></canvas>
+    <div id="tip"></div>
+    <div id="hud"></div>
+    <div id="loading"><div class="spin"></div><div id="loadmsg">Loading data…</div></div>
+  </div>
+
+<script>
+const DPR = Math.min(window.devicePixelRatio||1, 2);
+const $ = s => document.querySelector(s);
+$('#datasetPicker').value = location.pathname.includes('/kidney/') ? '/kidney/index.html' : '/index.html';
+$('#datasetPicker').onchange = e => location.href = e.target.value;
+const cv = $('#cv'), ctx = cv.getContext('2d');
+let M=null, N=0, coords=null, expr=null; // coords: Float32 sx,sy,ux,uy ; expr Uint8 gene-major
+let sx,sy,ux,uy;
+
+// ---- categorical palette (Okabe-Ito extended, distinct & color-safe-ish) ----
+const PALETTE = ["#4c9aff","#ff7b54","#3ddc84","#c77dff","#ffd166","#ff5d8f","#2ec4b6",
+  "#f79256","#9b5de5","#00bbf9","#e63946","#80ed99","#f15bb5","#8ac926","#ff924c",
+  "#5c7cfa","#ffca3a","#06d6a0","#ef476f","#118ab2","#b5838d","#a0c4ff"];
+// continuous colormap (viridis-ish)
+const VIRIDIS = [[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]];
+function lerp(a,b,t){return a+(b-a)*t}
+function cmap(t){ // t in 0..1 -> [r,g,b]
+  t=Math.max(0,Math.min(1,t)); const s=t*(VIRIDIS.length-1); const i=Math.floor(s); const f=s-i;
+  const a=VIRIDIS[i], b=VIRIDIS[Math.min(i+1,VIRIDIS.length-1)];
+  return [Math.round(lerp(a[0],b[0],f)),Math.round(lerp(a[1],b[1],f)),Math.round(lerp(a[2],b[2],f))];
+}
+
+// ---- state ----
+let view='spatial';
+let colorMode={type:'cat', field:'celltype_plot'}; // or {type:'num',field}, {type:'gene',idx}
+let ptSize=2.5, ptAlpha=0.85;
+let filter={field:'', val:''};          // exact-match filter on a categorical
+let hidden=new Set();                    // hidden categories (legend toggles)
+let cam={x:0,y:0,scale:1};               // pan/zoom in data space
+let colorCache=null;                     // Uint8 [N*3] current colors
+let visCache=null;                       // Uint8 [N] visible flag
+
+async function boot(){
+  $('#loadmsg').textContent='Loading metadata…';
+  M = await (await fetch('data/manifest.json')).json();
+  N = M.n;
+  $('#loadmsg').textContent='Loading coordinates…';
+  const cb = await (await fetch('data/coords.bin')).arrayBuffer();
+  coords = new Float32Array(cb);
+  sx=coords.subarray(0,N); sy=coords.subarray(N,2*N);
+  ux=coords.subarray(2*N,3*N); uy=coords.subarray(3*N,4*N);
+  $('#loadmsg').textContent='Loading expression…';
+  const eb = await (await fetch('data/expr.bin')).arrayBuffer();
+  expr = new Uint8Array(eb);
+  $('#subhead').textContent = `${N.toLocaleString()} cells · ${M.genes.length} genes · kidney injury/repair`;
+  buildUI();
+  resize();
+  resetView();
+  $('#loading').style.display='none';
+}
+
+// ---- UI construction ----
+const CAT_FIELDS = ['celltype_plot','region','time','CN','ident'];
+const NUM_FIELDS = ['n_counts','n_genes'];
+
+function buildUI(){
+  const cb=$('#colorBy');
+  const mk=(v,t)=>{const o=document.createElement('option');o.value=v;o.textContent=t;return o};
+  const g1=document.createElement('optgroup'); g1.label='Categories';
+  CAT_FIELDS.forEach(f=>g1.appendChild(mk('cat:'+f, f)));
+  const g2=document.createElement('optgroup'); g2.label='Numeric';
+  NUM_FIELDS.forEach(f=>g2.appendChild(mk('num:'+f, f)));
+  const g3=document.createElement('optgroup'); g3.label='Gene expression';
+  g3.appendChild(mk('gene:', 'Gene → pick below…'));
+  cb.append(g1,g2,g3);
+  cb.value='cat:celltype_plot';
+  cb.onchange=()=>{
+    const [t,f]=cb.value.split(':');
+    $('#geneWrap').style.display = t==='gene' ? 'block':'none';
+    if(t==='cat') colorMode={type:'cat',field:f};
+    else if(t==='num') colorMode={type:'num',field:f};
+    else { if(colorMode.type!=='gene') colorMode={type:'gene',idx:0}; }
+    hidden.clear(); recolor(); draw(); buildLegend();
+  };
+
+  // gene picker
+  const gl=$('#geneList');
+  function fillGenes(q){
+    gl.innerHTML='';
+    q=q.trim().toLowerCase();
+    let count=0;
+    M.genes.forEach((g,i)=>{
+      if(q && !g.toLowerCase().includes(q)) return;
+      if(count++>200) return;
+      const o=document.createElement('option'); o.value=i; o.textContent=g; gl.appendChild(o);
+    });
+  }
+  fillGenes('');
+  $('#geneSearch').oninput=e=>fillGenes(e.target.value);
+  gl.onchange=()=>{ colorMode={type:'gene',idx:+gl.value}; recolor(); draw(); buildLegend(); };
+
+  // view toggle
+  $('#viewSeg').onclick=e=>{
+    const b=e.target.closest('button'); if(!b)return;
+    [...e.currentTarget.children].forEach(x=>x.classList.toggle('on',x===b));
+    view=b.dataset.v; resetView();
+  };
+
+  // filter
+  const ff=$('#filterField');
+  ff.appendChild(mk('','(no filter)'));
+  CAT_FIELDS.forEach(f=>ff.appendChild(mk(f,f)));
+  ff.onchange=()=>{
+    const f=ff.value; const fv=$('#filterVal'); fv.innerHTML='';
+    filter={field:f,val:''};
+    if(f){ fv.appendChild(mk('','all '+f));
+      M.categoricals[f].categories.forEach(c=>fv.appendChild(mk(c,c))); }
+    else fv.innerHTML='';
+    updateVis(); draw();
+  };
+  $('#filterVal').onchange=e=>{ filter.val=e.target.value; updateVis(); draw(); };
+
+  $('#ptSize').oninput=e=>{ptSize=+e.target.value; draw();};
+  $('#ptAlpha').oninput=e=>{ptAlpha=+e.target.value; draw();};
+  $('#legReset').onclick=()=>{hidden.clear(); updateVis(); draw(); buildLegend();};
+
+  recolor(); updateVis(); buildLegend();
+}
+
+// ---- coloring ----
+function recolor(){
+  colorCache=new Uint8Array(N*3);
+  if(colorMode.type==='cat'){
+    const c=M.categoricals[colorMode.field]; const codes=c.codes;
+    for(let i=0;i<N;i++){ const col=hex2rgb(PALETTE[codes[i]%PALETTE.length]);
+      colorCache[i*3]=col[0]; colorCache[i*3+1]=col[1]; colorCache[i*3+2]=col[2]; }
+  } else if(colorMode.type==='num'){
+    const arr=M.numeric[colorMode.field]; let mn=Infinity,mx=-Infinity;
+    for(const v of arr){ if(v<mn)mn=v; if(v>mx)mx=v; }
+    colorMode._mn=mn; colorMode._mx=mx; const rng=(mx-mn)||1;
+    for(let i=0;i<N;i++){ const col=cmap((arr[i]-mn)/rng);
+      colorCache[i*3]=col[0]; colorCache[i*3+1]=col[1]; colorCache[i*3+2]=col[2]; }
+  } else { // gene
+    const base=colorMode.idx*N;
+    for(let i=0;i<N;i++){ const col=cmap(expr[base+i]/255);
+      colorCache[i*3]=col[0]; colorCache[i*3+1]=col[1]; colorCache[i*3+2]=col[2]; }
+  }
+}
+function hex2rgb(h){return [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];}
+
+// ---- visibility (filter + legend hide) ----
+function updateVis(){
+  visCache=new Uint8Array(N); visCache.fill(1);
+  if(filter.field && filter.val){
+    const c=M.categoricals[filter.field]; const idx=c.categories.indexOf(filter.val);
+    const codes=c.codes;
+    for(let i=0;i<N;i++) if(codes[i]!==idx) visCache[i]=0;
+  }
+  if(colorMode.type==='cat' && hidden.size){
+    const codes=M.categoricals[colorMode.field].codes;
+    for(let i=0;i<N;i++) if(hidden.has(codes[i])) visCache[i]=0;
+  }
+}
+
+// ---- coordinate helpers ----
+function curXY(i){ return view==='spatial' ? [sx[i],sy[i]] : [ux[i],uy[i]]; }
+function dataRange(){ const r=view==='spatial'?M.coords.spatial:M.coords.umap;
+  return [r.xmin,r.xmax, view==='spatial'?r.ymax:r.ymin, view==='spatial'?r.ymin:r.ymax]; }
+
+let W=0,H=0;
+function resize(){
+  const r=$('#main').getBoundingClientRect();
+  W=r.width; H=r.height;
+  cv.width=W*DPR; cv.height=H*DPR; cv.style.width=W+'px'; cv.style.height=H+'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  draw();
+}
+window.addEventListener('resize',resize);
+
+// map data -> screen using camera
+function toScreen(dx,dy){ return [ (dx-cam.x)*cam.scale + W/2, (dy-cam.y)*cam.scale + H/2 ]; }
+function toData(px,py){ return [ (px-W/2)/cam.scale + cam.x, (py-H/2)/cam.scale + cam.y ]; }
+
+function resetView(){
+  const r = view==='spatial'?M.coords.spatial:M.coords.umap;
+  const w=r.xmax-r.xmin, h=r.ymax-r.ymin;
+  cam.x=(r.xmin+r.xmax)/2; cam.y=(r.ymin+r.ymax)/2;
+  const pad=0.92;
+  cam.scale=Math.min(W/w, H/h)*pad;
+  draw();
+}
+
+// ---- draw ----
+function draw(){
+  if(!coords) return;
+  ctx.clearRect(0,0,W,H);
+  const flipY = view==='spatial' ? -1 : 1; // spatial y grows downward in tissue coords
+  const s=cam.scale, cx=cam.x, cy=cam.y;
+  const xs = view==='spatial'?sx:ux, ys = view==='spatial'?sy:uy;
+  const size=ptSize, sz2=size; // radius in px
+  ctx.globalAlpha=ptAlpha;
+  const cc=colorCache, vc=visCache;
+  for(let i=0;i<N;i++){
+    if(vc && !vc[i]) continue;
+    const px=(xs[i]-cx)*s + W/2;
+    const py=(ys[i]-cy)*s*flipY + H/2;
+    if(px<-4||px>W+4||py<-4||py>H+4) continue;
+    ctx.fillStyle='rgb('+cc[i*3]+','+cc[i*3+1]+','+cc[i*3+2]+')';
+    ctx.fillRect(px-sz2/2, py-sz2/2, size, size);
+  }
+  ctx.globalAlpha=1;
+  $('#hud').textContent = `${view.toUpperCase()} · zoom ${(s).toPrecision(2)} · ${countVisible().toLocaleString()} cells`;
+}
+function countVisible(){ if(!visCache) return N; let c=0; for(let i=0;i<N;i++) if(visCache[i])c++; return c; }
+
+// ---- interaction: pan / zoom / hover ----
+let drag=null;
+cv.addEventListener('mousedown',e=>{ drag={x:e.offsetX,y:e.offsetY,camx:cam.x,camy:cam.y}; });
+window.addEventListener('mouseup',()=>drag=null);
+cv.addEventListener('mousemove',e=>{
+  if(drag){
+    const flipY=view==='spatial'?-1:1;
+    cam.x = drag.camx - (e.offsetX-drag.x)/cam.scale;
+    cam.y = drag.camy - (e.offsetY-drag.y)/cam.scale*flipY;
+    draw(); $('#tip').style.display='none'; return;
+  }
+  hover(e.offsetX,e.offsetY,e.clientX,e.clientY);
+});
+cv.addEventListener('mouseleave',()=>$('#tip').style.display='none');
+cv.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const flipY=view==='spatial'?-1:1;
+  const [dx,dy]=[ (e.offsetX-W/2)/cam.scale+cam.x, (e.offsetY-H/2)/cam.scale*flipY+cam.y ];
+  const f=Math.exp(-e.deltaY*0.0015);
+  cam.scale*=f;
+  cam.x = dx - (e.offsetX-W/2)/cam.scale;
+  cam.y = dy - (e.offsetY-H/2)/cam.scale*flipY;
+  draw();
+},{passive:false});
+cv.addEventListener('dblclick',resetView);
+
+function hover(px,py,clientX,clientY){
+  const flipY=view==='spatial'?-1:1;
+  const xs=view==='spatial'?sx:ux, ys=view==='spatial'?sy:uy;
+  const s=cam.scale;
+  let best=-1, bd=Infinity; const rad=8; // px search radius
+  for(let i=0;i<N;i++){
+    if(visCache && !visCache[i]) continue;
+    const sxp=(xs[i]-cam.x)*s + W/2;
+    const syp=(ys[i]-cam.y)*s*flipY + H/2;
+    const d=(sxp-px)*(sxp-px)+(syp-py)*(syp-py);
+    if(d<bd){bd=d;best=i;}
+  }
+  const tip=$('#tip');
+  if(best<0 || bd>rad*rad){ tip.style.display='none'; return; }
+  tip.innerHTML=cellInfo(best);
+  tip.style.display='block';
+  const mr=$('#main').getBoundingClientRect();
+  let lx=clientX-mr.left+14, ly=clientY-mr.top+14;
+  if(lx+240>W) lx=px-240; if(ly+120>H) ly=py-110;
+  tip.style.left=lx+'px'; tip.style.top=ly+'px';
+}
+function cellInfo(i){
+  const g=k=>M.categoricals[k].categories[M.categoricals[k].codes[i]];
+  let h=`<b>${g('celltype_plot')}</b><br>`;
+  h+=`<span class="k">region</span> ${g('region')} · <span class="k">time</span> ${g('time')}<br>`;
+  h+=`<span class="k">neighborhood</span> ${g('CN')} · <span class="k">cluster</span> ${g('ident')}<br>`;
+  h+=`<span class="k">counts</span> ${M.numeric.n_counts[i]|0} · <span class="k">genes</span> ${M.numeric.n_genes[i]|0}`;
+  if(colorMode.type==='gene'){
+    const raw=(expr[colorMode.idx*N+i]/255)*Math.log1p(M.gene_raw_max[colorMode.idx]);
+    h+=`<br><span class="k">${M.genes[colorMode.idx]}</span> log1p≈${raw.toFixed(2)}`;
+  }
+  return h;
+}
+
+// ---- legend ----
+function buildLegend(){
+  const L=$('#legend'); L.innerHTML='';
+  const title=$('#legTitle');
+  if(colorMode.type==='cat'){
+    title.firstChild.textContent='Legend ';
+    $('#legReset').style.display='inline';
+    const c=M.categoricals[colorMode.field];
+    const counts=new Array(c.categories.length).fill(0);
+    for(const code of c.codes) counts[code]++;
+    c.categories.forEach((name,idx)=>{
+      const row=document.createElement('div'); row.className='lg'+(hidden.has(idx)?' off':'');
+      row.innerHTML=`<span class="sw" style="background:${PALETTE[idx%PALETTE.length]}"></span>${name}<span class="ct">${counts[idx].toLocaleString()}</span>`;
+      row.onclick=()=>{ hidden.has(idx)?hidden.delete(idx):hidden.add(idx); updateVis(); draw(); buildLegend(); };
+      L.appendChild(row);
+    });
+  } else {
+    $('#legReset').style.display='none';
+    let mn,mx,label;
+    if(colorMode.type==='num'){ mn=colorMode._mn; mx=colorMode._mx; label=colorMode.field; }
+    else { mn=0; mx=1; label=M.genes[colorMode.idx]+' (log, rel.)'; }
+    title.firstChild.textContent='Legend ';
+    const bar=document.createElement('div'); bar.id='cbar';
+    let grad='linear-gradient(90deg,';
+    for(let t=0;t<=10;t++){const c=cmap(t/10); grad+=`rgb(${c[0]},${c[1]},${c[2]}) ${t*10}%${t<10?',':''}`;}
+    bar.style.background=grad+')';
+    const lab=document.createElement('div'); lab.id='cbar-labels';
+    lab.innerHTML=`<span>${(+mn).toPrecision(3)}</span><span>${label}</span><span>${(+mx).toPrecision(3)}</span>`;
+    L.append(bar,lab);
+  }
+}
+
+boot().catch(e=>{ $('#loadmsg').textContent='Error: '+e.message; console.error(e); });
+</script>
+</body>
+</html>

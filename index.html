@@ -80,6 +80,14 @@
     <div class="sub" id="subhead">loading…</div>
 
     <div class="group">
+      <label class="h">Dataset</label>
+      <select id="datasetPicker">
+        <option value="/index.html">Mouse-brain aging</option>
+        <option value="/kidney/index.html">Kidney injury/repair</option>
+      </select>
+    </div>
+
+    <div class="group">
       <label class="h">View</label>
       <div class="seg" id="viewSeg">
         <button data-v="spatial" class="on">Spatial</button>
@@ -134,6 +142,8 @@
 <script>
 const DPR = Math.min(window.devicePixelRatio||1, 2);
 const $ = s => document.querySelector(s);
+$('#datasetPicker').value = location.pathname.includes('/kidney/') ? '/kidney/index.html' : '/index.html';
+$('#datasetPicker').onchange = e => location.href = e.target.value;
 const cv = $('#cv'), ctx = cv.getContext('2d');
 let M=null, N=0, coords=null, expr=null; // coords: Float32 sx,sy,ux,uy ; expr Uint8 gene-major
 let sx,sy,ux,uy;

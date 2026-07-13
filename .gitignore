@@ -16,3 +16,8 @@ Icon?
 
 # Local viewer copy — use the release tracked at repo root instead
 /viewer/
+
+# Raw source data — too large to track; the packed kidney/data/ bundle
+# (built via export_kidney_data.py) is committed instead
+/kidneys.h5ad
+/kidneys_downsampled.h5ad
