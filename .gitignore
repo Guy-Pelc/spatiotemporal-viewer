@@ -14,5 +14,8 @@ Icon?
 # memsearch tool state
 .memsearch/
 
+# Raw source data — too large to track; downsampled output is committed instead
+/kidneys.h5ad
+
 # Local viewer copy — use the release tracked at repo root instead
 /viewer/
