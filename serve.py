@@ -13,6 +13,7 @@ running export_data.py, which needs `anndata` and the source .h5ad.
 """
 import argparse
 import os
+import socket
 import subprocess
 import sys
 import threading
@@ -21,6 +22,18 @@ from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def lan_ip():
+    """Best-effort LAN IP of this machine (no packets are actually sent)."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+    finally:
+        s.close()
 
 
 def ensure_data():
@@ -41,21 +54,30 @@ def main():
                     help="alternative way to set the port")
     ap.add_argument("--no-open", action="store_true",
                     help="do not open a browser automatically")
+    ap.add_argument("--lan", action="store_true",
+                    help="serve on your local network so phones/other devices "
+                         "on the same WiFi can connect")
+    ap.add_argument("--host", default=None,
+                    help="interface to bind (default 127.0.0.1; --lan uses 0.0.0.0)")
     args = ap.parse_args()
     port = args.port_opt if args.port_opt is not None else args.port
+    host = args.host or ("0.0.0.0" if args.lan else "127.0.0.1")
 
     ensure_data()
 
     # Serve files relative to this script's directory, regardless of cwd.
     handler = partial(SimpleHTTPRequestHandler, directory=HERE)
     try:
-        httpd = ThreadingHTTPServer(("127.0.0.1", port), handler)
+        httpd = ThreadingHTTPServer((host, port), handler)
     except OSError as e:
-        sys.exit(f"Could not bind to port {port}: {e}\n"
+        sys.exit(f"Could not bind to {host}:{port}: {e}\n"
                  f"Try another port, e.g. python serve.py {port + 1}")
 
     url = f"http://localhost:{port}/index.html"
     print(f"Viewer at -> {url}   (Ctrl-C to stop)")
+    if host in ("0.0.0.0", "::"):
+        print(f"On your network (phone, same WiFi) -> "
+              f"http://{lan_ip()}:{port}/index.html")
     if not args.no_open:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()
     try:
