@@ -5,13 +5,29 @@ transcriptomics: 49,998 cells × 300 genes).
 
 ## Run
 
+Only **Python 3** is required. From the repo root:
+
+**macOS / Linux**
 ```bash
-cd viewer
-./run.sh            # or: python3 -m http.server 8777
-# open http://localhost:8777/index.html
+./run.sh                 # or: python3 serve.py
 ```
 
-`run.sh` regenerates the data bundle automatically if it's missing.
+**Windows**
+```bat
+run.bat                  REM or double-click it, or: python serve.py
+```
+
+Either way the viewer opens at <http://localhost:8777/index.html>. Options work
+on all platforms:
+
+```
+python serve.py 9000       # choose a port
+python serve.py --no-open  # don't auto-open a browser
+```
+
+`serve.py` serves the folder it lives in (so the working directory doesn't
+matter) and regenerates the `data/` bundle automatically if it's missing
+(that step additionally needs `anndata` and the source `.h5ad`).
 
 ## Features
 
@@ -28,6 +44,8 @@ cd viewer
 
 | File | What it is |
 |------|-----------|
+| `serve.py` | Cross-platform launcher (Unix + Windows); serves the viewer. |
+| `run.sh` / `run.bat` | Thin wrappers over `serve.py` for macOS-Linux / Windows. |
 | `export_data.py` | Packs the `.h5ad` into the `data/` bundle below. |
 | `data/manifest.json` | Genes, categorical codes, numeric fields, coord ranges. |
 | `data/coords.bin` | Float32 spatial + UMAP coordinates. |
