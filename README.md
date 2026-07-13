@@ -20,6 +20,10 @@ cd viewer
   `mouse_id`, `slide_id`), any numeric field (`age`, `transcript_count`, …), or
   any of the **300 genes** (searchable) with a viridis colorbar.
 - **Filter**: restrict to one category value (e.g. only `STR`, or one mouse).
+- **Mouse age**: a slider that steps through the 20 discrete ages (each maps to
+  one mouse), oldest to the right. Combines with the other controls, so you can
+  watch a gene or cell type across the aging timeline. The ▶ button animates
+  through the ages automatically.
 - **Legend**: click a cell type to hide/show it; `reset` restores all.
 - **Navigation**: scroll to zoom, drag to pan, double-click to reset view,
   hover a cell for its full metadata.
